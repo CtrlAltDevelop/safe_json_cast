@@ -1,3 +1,14 @@
+## 1.1.1
+
+- The SDK floor drops to Dart 2.15 — Flutter 2.8 — from 3.12, widening who can
+  depend on this without changing anything about what it does. That is as low
+  as the code allows: 2.15 is where `Enum` and `Enum.name` arrived, and
+  `asEnum` is built on them.
+- The three constructs that had been holding the floor at Dart 3 were rewritten
+  in terms that predate it — a record in the path walker, a switch expression
+  in `asDuration`, an unnamed `library` directive. None was load-bearing, and
+  no behaviour changed with them: the same 120 tests pass.
+
 ## 1.1.0
 
 Additive throughout — every 1.0.0 call site compiles unchanged, and the
@@ -45,11 +56,6 @@ exception messages are byte-for-byte what they were.
 - `growable` on `asList`, for the callers that were copying the result.
 - `tryCast`, which turns a failed cast into `null` so a deliberate default
   stays visible at the call site: `tryCast(() => json.asDouble('fee')) ?? 0`.
-- The SDK floor drops to Dart 2.15 — Flutter 2.8 — from 3.12. That is as low
-  as the code allows: 2.15 is where `Enum` and `Enum.name` arrived, which
-  `asEnum` needs. The three Dart 3 constructs that had crept in (a record, a
-  switch expression, an unnamed `library`) were rewritten; none of them was
-  load-bearing.
 - 120 tests, up from 58.
 
 ## 1.0.0
