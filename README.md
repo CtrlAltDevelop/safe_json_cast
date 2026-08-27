@@ -39,7 +39,7 @@ bug against the right side of it.
 
 ```yaml
 dependencies:
-  safe_json_cast: ^1.0.0
+  safe_json_cast: ^1.1.0
 ```
 
 Requires Dart 3.13.0 or newer — Flutter 3.47.0 or newer, if you are on Flutter.
@@ -54,13 +54,22 @@ Every cast comes in two forms: a strict one that throws on `null`, and an
 | Cast          | Accepts                                                                          |
 | ------------- | -------------------------------------------------------------------------------- |
 | `asString`    | any non-null value; anything but a `String` is rendered with `toString()`         |
+| `asStrictString` | a `String` and nothing else — no coercion                                     |
+| `asNonEmptyString` | as `asString`, rejecting one that is empty once trimmed                     |
 | `asCleanUrl`  | as `asString`, with one leading and one trailing `/` removed                      |
 | `asDouble`    | any `num`; a decimal `String`, with grouping commas and whitespace stripped       |
 | `asInt`       | any `num`, truncated toward zero; a numeric `String`, likewise                    |
 | `asBool`      | a `bool`; a `num`, true when non-zero; `true/t/1/yes/y` and `false/f/0/no/n`      |
 | `asDateTime`  | a `DateTime`; an ISO 8601 `String`; a `num` epoch, in seconds or milliseconds     |
+| `asNum`       | any `num`, subtype intact; a numeric `String`                                     |
+| `asBigInt`    | an integral `num`; an integer `String` — a fraction is rejected, not truncated    |
+| `asUri`       | a `Uri`; a parseable `String`                                                     |
+| `asEnum<T>`   | a `String` matching an enum name case-insensitively, or a `wireNames` key         |
+| `asDuration`  | a `Duration`; a `num` or numeric `String`, read in a unit you state               |
 | `asMap`       | a `Map` whose keys are all `String`s                                              |
+| `asMapOf<T>`  | as `asMap`, with each value converted by a callback                               |
 | `asList<T>`   | a `List`, with each element converted by a callback                               |
+| `asSet<T>`    | as `asList`, collapsing repeats — or rejecting them                               |
 
 The string forms are the point of the exercise. Exchange and payment APIs send
 prices as strings to preserve precision, booleans as `0`/`1`, and timestamps as
@@ -110,8 +119,85 @@ json.asList(
 // FormatException: Field "levels[1].price"="oops" cannot be parsed as double.
 ```
 
-`asStringList` and `asMapList` are shorthands for the two common cases. Lists
-come back fixed-length; copy them if you need to grow one.
+`asStringList`, `asIntList`, `asDoubleList` and `asMapList` are shorthands for
+the common cases. Lists come back fixed-length; pass `growable: true` when you
+need to add to one.
+
+## Enums and dictionaries
+
+`asEnum` matches an enum entry by name, case-insensitively. When the wire
+spelling differs from Dart's, map it:
+
+```dart
+json.asEnum(
+  'status',
+  values: OrderStatus.values,
+  wireNames: const {'PARTIALLY_FILLED': OrderStatus.partiallyFilled},
+);
+// FormatException: Field "status"="CANCELED" is not one of [PARTIALLY_FILLED, newOrder, filled, partiallyFilled].
+```
+
+`asMapOf` is for the objects an API uses as a dictionary, where the keys are
+data and cannot be spelled out in a model. It names the failing entry by key:
+
+```dart
+json.asMapOf<double>(
+  'balances',
+  entry: (raw, field) => asDouble(raw, field: field),
+);
+// FormatException: Field "balances.BTC"="n/a" cannot be parsed as double.
+```
+
+## Handling the failure
+
+Every cast throws a `JsonCastException`, which **is** a `FormatException` — so
+catching the latter works as it always did. Catch the former when you want the
+parts rather than the sentence:
+
+```dart
+try {
+  return Ticker.fromJson(json);
+} on JsonCastException catch (e) {
+  logger.warn('bad ticker', {'field': e.field, 'expected': e.expectedType});
+  rethrow;
+}
+```
+
+When a field genuinely is allowed a default, `tryCast` keeps that decision at
+the call site instead of burying it in the cast:
+
+```dart
+final fee = tryCast(() => json.asDouble('fee')) ?? 0;
+```
+
+## Bounds
+
+`asDouble`, `asInt` and `asNum` take inclusive `min` and `max`, for the values
+that convert cleanly but cannot be right:
+
+```dart
+json.asDouble('sharePct', min: 0, max: 100);
+// FormatException: Field "sharePct"="150" is outside the range 0..100.
+```
+
+## Nested fields
+
+`castAt` reaches a leaf through nested objects and arrays, and keeps the whole
+path in the failure rather than the leaf's own name:
+
+```dart
+json.castAt('data.orders[0].price', asDouble);
+// FormatException: Field "data.orders[0].price"="n/a" cannot be parsed as double.
+```
+
+Any cast fits, including the `asNullable…` ones. An absent step along the way
+resolves to `null`, so the cast decides whether that is an error; a step that
+is *present but unwalkable* — indexing into a string — throws, naming the part
+of the path that did work. `valueAt` returns the raw value and `hasPath` is the
+path-shaped `hasKey`.
+
+Prefer unpacking object by object when you are reading many fields out of the
+same node; `castAt` is for the one leaf buried in an envelope.
 
 ## Absent keys
 
@@ -128,12 +214,17 @@ if (json.hasKey('memo')) { /* the server sent the field, possibly as null */ }
 **`asDateTime` guesses the epoch unit.** A `num` of 1e12 or more is read as
 milliseconds, anything smaller as seconds. That misreads second-precision
 timestamps after the year 33658 and millisecond-precision ones before
-2001-09-09. When the unit is known, prefer `asInt` and build the `DateTime`
-yourself.
+2001-09-09. When the unit is known, say so and the guess is skipped:
+
+```dart
+json.asDateTime('updateTime', unit: EpochUnit.seconds);
+```
 
 **`asString` never rejects a non-null value.** A number arriving where a string
 was promised becomes `'12'` rather than an error, which is usually what you
 want for ids but does mean `asString` will not catch a type drift on its own.
+Reach for `asStrictString` where that drift is worth hearing about, or
+`asNonEmptyString` where `""` is.
 
 ## License
 

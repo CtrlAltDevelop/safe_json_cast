@@ -4,6 +4,10 @@ import 'dart:convert';
 
 import 'package:safe_json_cast/safe_json_cast.dart';
 
+/// The status an order arrives with. The wire spells two of these
+/// differently, which [SafeJsonMap.asEnum] takes a map for.
+enum OrderStatus { open, filled, partiallyFilled }
+
 class Ticker {
   const Ticker({
     required this.symbol,
@@ -76,9 +80,11 @@ void main() {
 
   try {
     Ticker.fromJson(jsonDecode(bad) as Map<String, dynamic>);
-  } on FormatException catch (error) {
+  } on JsonCastException catch (error) {
     // FormatException: Field "lastPrice"="n/a" cannot be parsed as double.
     print(error);
+    // The same failure as data, for a log line or an error report.
+    print('field=${error.field} expected=${error.expectedType}');
   }
 
   // An element cast receives an indexed field name, so building the child
@@ -95,4 +101,64 @@ void main() {
     // double.
     print(error);
   }
+
+  // Enums come off the wire in whatever case the API prefers, and sometimes
+  // under a different name entirely.
+  const order = '{"status": "PARTIALLY_FILLED", "fee": "n/a"}';
+  final Map<String, dynamic> orderJson =
+      jsonDecode(order) as Map<String, dynamic>;
+  print(
+    orderJson.asEnum(
+      'status',
+      values: OrderStatus.values,
+      wireNames: const <String, OrderStatus>{
+        'PARTIALLY_FILLED': OrderStatus.partiallyFilled,
+      },
+    ),
+  );
+
+  // A field that really is allowed a default: tryCast keeps the fallback at
+  // the call site, where it can be read, rather than inside the cast.
+  print(tryCast(() => orderJson.asDouble('fee')) ?? 0);
+
+  // A leaf buried in an envelope: castAt walks to it and keeps the whole path
+  // in the failure, instead of reporting the leaf's own name.
+  const envelope = '''
+  {
+    "data": { "orders": [ { "price": "1.5" }, { "price": "n/a" } ] },
+    "meta": { "expiresIn": 3600 }
+  }
+  ''';
+  final Map<String, dynamic> envelopeJson =
+      jsonDecode(envelope) as Map<String, dynamic>;
+  print(envelopeJson.castAt('data.orders[0].price', asDouble));
+  try {
+    envelopeJson.castAt('data.orders[1].price', asDouble);
+  } on JsonCastException catch (error) {
+    // FormatException: Field "data.orders[1].price"="n/a" cannot be parsed as
+    // double.
+    print(error);
+  }
+
+  // A number an API means as seconds, which Duration should not have to be
+  // reconstructed from by hand at every call site.
+  print(envelopeJson.castAt('meta.expiresIn', asDuration));
+
+  // A bound catches the value that converts cleanly but cannot be right.
+  try {
+    (<String, dynamic>{'sharePct': 150}).asDouble('sharePct', min: 0, max: 100);
+  } on JsonCastException catch (error) {
+    // FormatException: Field "sharePct"="150" is outside the range 0..100.
+    print(error);
+  }
+
+  // An object the API uses as a dictionary: the keys are data, so they cannot
+  // be spelled out in a model. A bad entry is named by key.
+  const wallet = '{"balances": {"BTC": "0.5", "ETH": 2}}';
+  print(
+    (jsonDecode(wallet) as Map<String, dynamic>).asMapOf<double>(
+      'balances',
+      entry: (Object? raw, String field) => asDouble(raw, field: field),
+    ),
+  );
 }

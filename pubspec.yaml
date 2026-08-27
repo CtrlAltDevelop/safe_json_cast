@@ -2,7 +2,7 @@ name: safe_json_cast
 description: >-
   Typed casts for decoded JSON that fail loudly and name the field, so a
   malformed payload surfaces at the parse site instead of deep in the UI.
-version: 1.0.0
+version: 1.1.0
 homepage: https://github.com/CtrlAltDevelop
 repository: https://github.com/CtrlAltDevelop/safe_json_cast
 issue_tracker: https://github.com/CtrlAltDevelop/safe_json_cast/issues

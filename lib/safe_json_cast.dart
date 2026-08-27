@@ -15,4 +15,5 @@
 library;
 
 export 'src/casts.dart';
+export 'src/exception.dart';
 export 'src/safe_json_map.dart';
