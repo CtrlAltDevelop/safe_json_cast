@@ -700,12 +700,21 @@ Duration asDuration(
       ? num.tryParse(value.replaceAll(',', '').trim())
       : null;
   if (amount != null) {
-    final double micros = switch (unit) {
-      DurationUnit.microseconds => amount.toDouble(),
-      DurationUnit.milliseconds => amount * 1000,
-      DurationUnit.seconds => amount * 1000000,
-      DurationUnit.minutes => amount * 60000000,
-    };
+    final double micros;
+    switch (unit) {
+      case DurationUnit.microseconds:
+        micros = amount.toDouble();
+        break;
+      case DurationUnit.milliseconds:
+        micros = amount * 1000;
+        break;
+      case DurationUnit.seconds:
+        micros = amount * 1000000;
+        break;
+      case DurationUnit.minutes:
+        micros = amount * 60000000;
+        break;
+    }
     return Duration(microseconds: micros.round());
   }
   throw JsonCastException.unparsable(
@@ -798,6 +807,15 @@ Set<T>? asNullableSet<T>(
 /// whole path as the field name.
 Object? valueAtPath(Object? root, String path) => _walkPath(root, path).value;
 
+/// What [_walkPath] found: the value a path landed on, and whether its final
+/// step was there at all.
+class _PathResult {
+  const _PathResult(this.value, this.present);
+
+  final Object? value;
+  final bool present;
+}
+
 /// Whether [path] resolves to anything in nested JSON [root], whatever its
 /// value.
 ///
@@ -808,7 +826,7 @@ bool pathExists(Object? root, String path) => _walkPath(root, path).present;
 
 /// Walks [path] through [root], reporting both the value and whether the final
 /// step was actually there.
-({Object? value, bool present}) _walkPath(Object? root, String path) {
+_PathResult _walkPath(Object? root, String path) {
   Object? current = root;
   bool present = true;
   final StringBuffer walked = StringBuffer();
@@ -822,7 +840,7 @@ bool pathExists(Object? root, String path) => _walkPath(root, path).present;
         : '$walked.$segment';
 
     if (!present || (current == null && walked.isNotEmpty)) {
-      return (value: null, present: false);
+      return const _PathResult(null, false);
     }
 
     if (isIndex) {
@@ -859,7 +877,7 @@ bool pathExists(Object? root, String path) => _walkPath(root, path).present;
       ..clear()
       ..write(consumed);
   }
-  return (value: current, present: present);
+  return _PathResult(current, present);
 }
 
 /// Splits `'data.orders[0].price'` into `data`, `orders`, `[0]`, `price`.

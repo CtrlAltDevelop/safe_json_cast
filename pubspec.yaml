@@ -16,9 +16,13 @@ topics:
 
 # No `flutter:` constraint on purpose: the package is pure Dart, and declaring
 # one would make the Flutter SDK mandatory for server and CLI consumers.
-# Flutter 3.47.0 ships Dart 3.13.0, so the SDK bound below covers it.
+#
+# The lower bound is as low as the code allows: 2.15 is where `Enum` and
+# `Enum.name` arrived, which `asEnum` is built on. Nothing here uses records,
+# patterns or any other Dart 3 feature, so the package still resolves on
+# Flutter 2.8 while remaining current on 3.x.
 environment:
-  sdk: ^3.13.0
+  sdk: ">=2.15.0 <4.0.0"
 
 dev_dependencies:
   lints: ^6.1.0

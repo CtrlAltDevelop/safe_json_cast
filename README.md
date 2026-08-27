@@ -42,7 +42,8 @@ dependencies:
   safe_json_cast: ^1.1.0
 ```
 
-Requires Dart 3.13.0 or newer — Flutter 3.47.0 or newer, if you are on Flutter.
+Requires Dart 2.15.0 or newer — Flutter 2.8 or newer, if you are on Flutter.
+Null safety is required; nothing here needs Dart 3.
 There is no `flutter` constraint in `pubspec.yaml`, so the package still
 resolves in server and CLI projects with no Flutter SDK installed.
 
