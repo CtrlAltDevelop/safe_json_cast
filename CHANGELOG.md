@@ -1,3 +1,37 @@
+## 1.2.0
+
+Bug fixes that tighten what the numeric casts accept, plus the move to the
+shared CI and a Dart 3 floor. No signature changed.
+
+- **Non-finite numbers are rejected.** `asDouble` and `asNum` no longer return
+  `NaN` or an infinity — from a number, from `'NaN'` / `'Infinity'`, or from
+  `'1e999'` overflowing — and `NaN` can no longer slip past `min` / `max`,
+  where every comparison is false. This is the failure the package exists to
+  stop; a payload that relied on receiving one now throws.
+- **No more stray `UnsupportedError` or `RangeError`.** `asInt`, `asDateTime`
+  and `asDuration` used to throw those for `NaN`, infinities and out-of-range
+  numbers, which `tryCast` and `on FormatException` did not catch. They now
+  throw `JsonCastException` naming the field.
+- `asDateTime` rejects an epoch outside the ±100,000,000 days `DateTime` can
+  hold. A second-precision value near 9.2e15 used to wrap around in the
+  multiplication and could land on a plausible date; it now throws.
+- `asDuration` rejects a magnitude past 2^53 microseconds (about 285 years)
+  instead of clamping it silently, so a value reads the same on the web.
+- `asInt` reads a string of plain digits as an integer rather than through a
+  `double`, so `'9007199254740993'` keeps its last digit.
+- `asBool` rejects `NaN` instead of reading it as `true`.
+- **The SDK floor moves to Dart 3.12.0**, from Dart 2.15.0 — the floor every
+  package here is gated on. The source now uses switch patterns and switch
+  expressions in `asBool`, `asDateTime` and `asDuration`.
+- CI moved to the shared reusable workflow in CtrlAltDevelop/ci-workflows:
+  formatting, `analyze --fatal-infos`, the tests, the example, a changelog
+  entry per version, and a pana score with no points lost.
+- Dependency bounds are explicit ranges rather than carets, so a consumer
+  already on an older version in the same major is not forced to move.
+- The README carries the pub, pub points, CI and licence badges the other
+  packages here carry.
+- 35 new tests, 155 in all.
+
 ## 1.1.1
 
 - The SDK floor drops to Dart 2.15 — Flutter 2.8 — from 3.12, widening who can

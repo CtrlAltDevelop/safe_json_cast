@@ -12,7 +12,7 @@
 ///   updatedAt: json.asDateTime('updateTime'),
 /// );
 /// ```
-library safe_json_cast;
+library;
 
 export 'src/casts.dart';
 export 'src/exception.dart';

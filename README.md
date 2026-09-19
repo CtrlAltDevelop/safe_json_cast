@@ -1,5 +1,10 @@
 # safe_json_cast
 
+[![pub package](https://img.shields.io/pub/v/safe_json_cast.svg)](https://pub.dev/packages/safe_json_cast)
+[![pub points](https://img.shields.io/pub/points/safe_json_cast)](https://pub.dev/packages/safe_json_cast/score)
+[![CI](https://github.com/CtrlAltDevelop/safe_json_cast/actions/workflows/ci.yml/badge.svg)](https://github.com/CtrlAltDevelop/safe_json_cast/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/CtrlAltDevelop/safe_json_cast/blob/main/LICENSE)
+
 Typed casts for decoded JSON that **fail loudly and name the field**, so a
 malformed payload surfaces at the parse site instead of as a `NaN` in a chart
 or a blank row three screens later.
@@ -39,13 +44,12 @@ bug against the right side of it.
 
 ```yaml
 dependencies:
-  safe_json_cast: ^1.1.0
+  safe_json_cast: ">=1.2.0 <2.0.0"
 ```
 
-Requires Dart 2.15.0 or newer — Flutter 2.8 or newer, if you are on Flutter.
-Null safety is required; nothing here needs Dart 3.
-There is no `flutter` constraint in `pubspec.yaml`, so the package still
-resolves in server and CLI projects with no Flutter SDK installed.
+Requires Dart 3.12.0 or newer — Flutter 3.44.0 or newer, if you are on
+Flutter. There is no `flutter` constraint in `pubspec.yaml`, so the package
+still resolves in server and CLI projects with no Flutter SDK installed.
 
 ## The casts
 
@@ -58,8 +62,8 @@ Every cast comes in two forms: a strict one that throws on `null`, and an
 | `asStrictString` | a `String` and nothing else — no coercion                                     |
 | `asNonEmptyString` | as `asString`, rejecting one that is empty once trimmed                     |
 | `asCleanUrl`  | as `asString`, with one leading and one trailing `/` removed                      |
-| `asDouble`    | any `num`; a decimal `String`, with grouping commas and whitespace stripped       |
-| `asInt`       | any `num`, truncated toward zero; a numeric `String`, likewise                    |
+| `asDouble`    | any finite `num`; a decimal `String`, with grouping commas and whitespace stripped |
+| `asInt`       | any finite `num`, truncated toward zero; a numeric `String`, likewise             |
 | `asBool`      | a `bool`; a `num`, true when non-zero; `true/t/1/yes/y` and `false/f/0/no/n`      |
 | `asDateTime`  | a `DateTime`; an ISO 8601 `String`; a `num` epoch, in seconds or milliseconds     |
 | `asNum`       | any `num`, subtype intact; a numeric `String`                                     |
@@ -199,6 +203,16 @@ path-shaped `hasKey`.
 
 Prefer unpacking object by object when you are reading many fields out of the
 same node; `castAt` is for the one leaf buried in an envelope.
+
+## Non-finite and out-of-range values
+
+`NaN`, `Infinity` and their string spellings (`'NaN'`, `'1e999'`) parse cleanly
+and then slip past every `min` and `max`, so `asDouble`, `asInt` and `asNum`
+reject them outright. `asDateTime` and `asDuration` do the same for a number
+their result type cannot hold, and every one of these fails as a
+`JsonCastException` — never a stray `RangeError` — so `tryCast` and
+`on FormatException` catch it. `asInt` reads a string of plain digits as an
+integer directly, so a 17-digit id keeps every digit.
 
 ## Absent keys
 

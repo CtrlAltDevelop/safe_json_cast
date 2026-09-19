@@ -46,6 +46,23 @@ T _checkRange<T extends num>(
   return converted;
 }
 
+/// Parses [text] as a decimal number after stripping grouping commas and
+/// surrounding whitespace, or returns `null` when it is not one — or is not
+/// finite, so `'NaN'`, `'Infinity'` and `'1e999'` never get through.
+double? _parseFinite(String text) {
+  final double? parsed = double.tryParse(text.replaceAll(',', '').trim());
+  return parsed != null && parsed.isFinite ? parsed : null;
+}
+
+/// The largest magnitude of epoch seconds, milliseconds and microseconds that
+/// [DateTime] accepts, which is 100,000,000 days either side of the epoch.
+const int _maxEpochSeconds = 8640000000000;
+const int _maxEpochMillis = 8640000000000000;
+
+/// The largest number of microseconds [asDuration] accepts: 2^53, the most a
+/// JavaScript number holds exactly, so a value reads the same on every platform.
+const int _maxDurationMicros = 9007199254740992;
+
 /// Casts a raw JSON value to a non-null [String].
 ///
 /// A [String] passes through untouched. Any other non-null value is rendered
@@ -107,14 +124,18 @@ String? asNullableCleanUrl(Object? value, {required String field}) {
 /// rather than wherever it is first used. The bounds are inclusive and are
 /// checked after conversion.
 ///
+/// `NaN` and the infinities are rejected, whether they arrive as a number or as
+/// text such as `'NaN'` or `'1e999'` — they parse cleanly, sail through every
+/// bound, and surface later as a blank chart.
+///
 /// Throws a [FormatException] naming [field] and quoting the value when it
 /// cannot be parsed.
 double asDouble(Object? value, {required String field, num? min, num? max}) {
-  if (value is num) {
+  if (value is num && value.isFinite) {
     return _checkRange(value.toDouble(), field, value, 'double', min, max);
   }
   if (value is String) {
-    final parsed = double.tryParse(value.replaceAll(',', '').trim());
+    final parsed = _parseFinite(value);
     if (parsed != null) {
       return _checkRange(parsed, field, value, 'double', min, max);
     }
@@ -144,6 +165,10 @@ double? asNullableDouble(
 /// An [int] passes through. Any other [num] is truncated toward zero. A
 /// [String] is parsed as a decimal number — grouping commas and surrounding
 /// whitespace are removed — and then truncated, so `'1,024.9'` yields `1024`.
+/// A string of plain digits is read as an integer directly, so a long id keeps
+/// every digit rather than being rounded through a [double].
+///
+/// `NaN` and the infinities are rejected, as they are by [asDouble].
 ///
 /// Pass [min] or [max] to reject a value that converts cleanly but cannot be
 /// right — a negative quantity, a percentage above 100 — at the parse site
@@ -154,11 +179,16 @@ double? asNullableDouble(
 /// cannot be parsed.
 int asInt(Object? value, {required String field, num? min, num? max}) {
   if (value is int) return _checkRange(value, field, value, 'int', min, max);
-  if (value is num) {
+  if (value is num && value.isFinite) {
     return _checkRange(value.toInt(), field, value, 'int', min, max);
   }
   if (value is String) {
-    final parsed = double.tryParse(value.replaceAll(',', '').trim());
+    final String text = value.replaceAll(',', '').trim();
+    final int? exact = int.tryParse(text);
+    if (exact != null) {
+      return _checkRange(exact, field, value, 'int', min, max);
+    }
+    final double? parsed = _parseFinite(text);
     if (parsed != null) {
       return _checkRange(parsed.toInt(), field, value, 'int', min, max);
     }
@@ -180,7 +210,8 @@ int? asNullableInt(Object? value, {required String field, num? min, num? max}) {
 
 /// Casts a raw JSON value to a non-null [bool].
 ///
-/// A [bool] passes through. A [num] is true when non-zero. A [String] is
+/// A [bool] passes through. A [num] is true when non-zero, except `NaN`, which
+/// is rejected rather than read as true. A [String] is
 /// matched case-insensitively against `true`/`t`/`1`/`yes`/`y` and
 /// `false`/`f`/`0`/`no`/`n`.
 ///
@@ -188,20 +219,12 @@ int? asNullableInt(Object? value, {required String field, num? min, num? max}) {
 /// matches none of those.
 bool asBool(Object? value, {required String field}) {
   if (value is bool) return value;
-  if (value is num) return value != 0;
+  if (value is num && !value.isNaN) return value != 0;
   if (value is String) {
     switch (value.trim().toLowerCase()) {
-      case 'true':
-      case 't':
-      case '1':
-      case 'yes':
-      case 'y':
+      case 'true' || 't' || '1' || 'yes' || 'y':
         return true;
-      case 'false':
-      case 'f':
-      case '0':
-      case 'no':
-      case 'n':
+      case 'false' || 'f' || '0' || 'no' || 'n':
         return false;
     }
   }
@@ -237,6 +260,10 @@ bool? asNullableBool(Object? value, {required String field}) {
 /// before 2001-09-09 as seconds. If your API's unit is known, prefer
 /// [asInt] and construct the [DateTime] yourself.
 ///
+/// A number that is not finite, or that lands outside the 100,000,000 days
+/// either side of the epoch a [DateTime] can hold, is rejected with the same
+/// exception rather than the [RangeError] the constructor would raise.
+///
 /// Throws a [FormatException] naming [field] and quoting the value when it
 /// cannot be parsed.
 DateTime asDateTime(
@@ -249,20 +276,22 @@ DateTime asDateTime(
     final parsed = DateTime.tryParse(value.trim());
     if (parsed != null) return parsed;
   }
-  if (value is num) {
-    final epoch = value.toInt();
-    switch (unit) {
-      case EpochUnit.seconds:
+  if (value is num && value.isFinite) {
+    final int epoch = value.toInt();
+    final EpochUnit resolved = unit == EpochUnit.guess
+        ? (epoch.abs() >= 1000000000000
+              ? EpochUnit.milliseconds
+              : EpochUnit.seconds)
+        : unit;
+    switch (resolved) {
+      case EpochUnit.seconds when epoch.abs() <= _maxEpochSeconds:
         return DateTime.fromMillisecondsSinceEpoch(epoch * 1000, isUtc: true);
-      case EpochUnit.milliseconds:
+      case EpochUnit.milliseconds when epoch.abs() <= _maxEpochMillis:
         return DateTime.fromMillisecondsSinceEpoch(epoch, isUtc: true);
-      case EpochUnit.microseconds:
+      case EpochUnit.microseconds when epoch.abs() <= _maxEpochMillis * 1000:
         return DateTime.fromMicrosecondsSinceEpoch(epoch, isUtc: true);
-      case EpochUnit.guess:
-        if (epoch.abs() >= 1000000000000) {
-          return DateTime.fromMillisecondsSinceEpoch(epoch, isUtc: true);
-        }
-        return DateTime.fromMillisecondsSinceEpoch(epoch * 1000, isUtc: true);
+      case _:
+        break;
     }
   }
   throw JsonCastException.unparsable(
@@ -374,13 +403,17 @@ List<T>? asNullableList<T>(
 /// whitespace removed first. Use it when a field is genuinely either, and
 /// rounding it through [asDouble] or [asInt] would lose something.
 ///
+/// `NaN` and the infinities are rejected, as they are by [asDouble].
+///
 /// Throws a [JsonCastException] naming [field] and quoting the value when it
 /// cannot be parsed.
 num asNum(Object? value, {required String field, num? min, num? max}) {
-  if (value is num) return _checkRange(value, field, value, 'num', min, max);
+  if (value is num && value.isFinite) {
+    return _checkRange(value, field, value, 'num', min, max);
+  }
   if (value is String) {
-    final parsed = num.tryParse(value.replaceAll(',', '').trim());
-    if (parsed != null) {
+    final num? parsed = num.tryParse(value.replaceAll(',', '').trim());
+    if (parsed != null && parsed.isFinite) {
       return _checkRange(parsed, field, value, 'num', min, max);
     }
   }
@@ -686,6 +719,10 @@ String? asNullableNonEmptyString(
 /// There is no guess here of the kind [asDateTime] makes: a duration carries
 /// no magnitude that would give its unit away, so the caller states it.
 ///
+/// `NaN`, the infinities and anything past 2^53 microseconds — about 285 years,
+/// the most a JavaScript number holds exactly — are rejected rather than
+/// wrapped or clamped.
+///
 /// Throws a [JsonCastException] naming [field] and quoting the value when it
 /// cannot be parsed.
 Duration asDuration(
@@ -699,23 +736,16 @@ Duration asDuration(
       : value is String
       ? num.tryParse(value.replaceAll(',', '').trim())
       : null;
-  if (amount != null) {
-    final double micros;
-    switch (unit) {
-      case DurationUnit.microseconds:
-        micros = amount.toDouble();
-        break;
-      case DurationUnit.milliseconds:
-        micros = amount * 1000;
-        break;
-      case DurationUnit.seconds:
-        micros = amount * 1000000;
-        break;
-      case DurationUnit.minutes:
-        micros = amount * 60000000;
-        break;
+  if (amount != null && amount.isFinite) {
+    final double micros = switch (unit) {
+      DurationUnit.microseconds => amount.toDouble(),
+      DurationUnit.milliseconds => amount * 1000,
+      DurationUnit.seconds => amount * 1000000,
+      DurationUnit.minutes => amount * 60000000,
+    };
+    if (micros.abs() <= _maxDurationMicros) {
+      return Duration(microseconds: micros.round());
     }
-    return Duration(microseconds: micros.round());
   }
   throw JsonCastException.unparsable(
     field: field,
