@@ -285,6 +285,23 @@ extension SafeJsonMap on Map<String, dynamic> {
   String? asNullableNonEmptyString(String field, {bool trim = false}) =>
       casts.asNullableNonEmptyString(this[field], field: field, trim: trim);
 
+  /// Reads [field] as a non-null [String] that matches [pattern].
+  ///
+  /// See [casts.asMatchingString].
+  String asMatchingString(String field, {required RegExp pattern}) =>
+      casts.asMatchingString(this[field], field: field, pattern: pattern);
+
+  /// Reads [field] as a [String] matching [pattern], or `null` when absent or
+  /// null.
+  ///
+  /// See [casts.asNullableMatchingString].
+  String? asNullableMatchingString(String field, {required RegExp pattern}) =>
+      casts.asNullableMatchingString(
+        this[field],
+        field: field,
+        pattern: pattern,
+      );
+
   /// Reads [field] as a non-null [Duration], reading a number in [unit].
   ///
   /// See [casts.asDuration].

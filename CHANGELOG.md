@@ -1,3 +1,11 @@
+## 1.3.0
+
+- **New: `asMatchingString`/`asNullableMatchingString`.** Casts a value to a
+  `String` and rejects it unless it matches a given `RegExp` — for fields
+  whose format is part of the contract, such as a symbol or currency code.
+- Added `.github/workflows/publish.yml`, publishing to pub.dev from a GitHub
+  release tag (`vX.Y.Z`) via OIDC, mirroring the other packages' release flow.
+
 ## 1.2.0
 
 Bug fixes that tighten what the numeric casts accept, plus the move to the

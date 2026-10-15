@@ -321,4 +321,38 @@ void main() {
       }
     });
   });
+
+  group('asMatchingString', () {
+    final RegExp symbol = RegExp(r'^[A-Z]{3,10}$');
+
+    test('passes through a value that matches', () {
+      expect(
+        asMatchingString('BTCUSDT', field: 'symbol', pattern: symbol),
+        'BTCUSDT',
+      );
+    });
+
+    test('rejects a value that converts but does not match', () {
+      expect(
+        () => asMatchingString('btc-usdt', field: 'symbol', pattern: symbol),
+        throwsCastFor('symbol'),
+      );
+    });
+
+    test('asNullableMatchingString maps null to null', () {
+      expect(
+        asNullableMatchingString(null, field: 'symbol', pattern: symbol),
+        isNull,
+      );
+    });
+
+    test('SafeJsonMap.asMatchingString reads off a map', () {
+      expect(
+        (<String, dynamic>{
+          'symbol': 'ETHUSDT',
+        }).asMatchingString('symbol', pattern: symbol),
+        'ETHUSDT',
+      );
+    });
+  });
 }

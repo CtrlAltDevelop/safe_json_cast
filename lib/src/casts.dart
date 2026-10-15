@@ -709,6 +709,44 @@ String? asNullableNonEmptyString(
   return asNonEmptyString(value, field: field, trim: trim);
 }
 
+/// Casts a raw JSON value to a non-null [String] that matches [pattern].
+///
+/// For fields whose shape is part of the contract — a symbol, a currency
+/// code, an id with a known format — where a value that converts but doesn't
+/// match is as wrong as one that doesn't convert at all.
+///
+/// Throws a [JsonCastException] naming [field] when the value is `null` or
+/// does not match [pattern] once converted with [asString].
+String asMatchingString(
+  Object? value, {
+  required String field,
+  required RegExp pattern,
+}) {
+  final String text = asString(value, field: field);
+  if (!pattern.hasMatch(text)) {
+    throw JsonCastException(
+      field: field,
+      value: value,
+      expectedType: 'a String matching $pattern',
+      message: 'Field "$field"="$text" does not match $pattern.',
+    );
+  }
+  return text;
+}
+
+/// Casts a raw JSON value to a [String] matching [pattern], mapping `null` to
+/// `null`.
+///
+/// See [asMatchingString].
+String? asNullableMatchingString(
+  Object? value, {
+  required String field,
+  required RegExp pattern,
+}) {
+  if (value == null) return null;
+  return asMatchingString(value, field: field, pattern: pattern);
+}
+
 /// Casts a raw JSON value to a non-null [Duration].
 ///
 /// A [Duration] passes through. A [num] is read in [unit], which defaults to
